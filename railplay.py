@@ -131,7 +131,7 @@ class MyApp(ShowBase):
             index += 1
             # normalize for -100;+100 scale
             node["lat"] = 100.0 * (bboxTop - node["lat"]) / ((bboxTop - bboxBottom)/2)
-            node["lon"] = 100.0 * (bboxRight - node["lon"]) / ((bboxRight - bboxLeft)/2)
+            node["lon"] = -100.0 * (bboxRight - node["lon"]) / ((bboxRight - bboxLeft)/2)
             self.nodes.append(node)
         print("Nodes parsed")
             
