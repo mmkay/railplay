@@ -1,45 +1,55 @@
 from math import pi, sin, cos
+import json
+import urllib2
  
 from direct.showbase.ShowBase import ShowBase
 from direct.task import Task
 from panda3d.core import *
  
+#TODO: separate concerns
 class MyApp(ShowBase):
+
+
     def __init__(self):
         ShowBase.__init__(self)
+        
+        self.nodes = []
+        self.ways = []
         
         self.setBackgroundColor(135.0/256.0,206.0/256.0,235.0/256.0)
        
         self.prepareFloor()
         
+        self.downloadOSMData()
+        
         self.loadLines()
  
         # Add the spinCameraTask procedure to the task manager.
-        self.taskMgr.add(self.spinCameraTask, "SpinCameraTask")
+        #self.taskMgr.add(self.spinCameraTask, "SpinCameraTask")
  
     # Define a procedure to move the camera.
     def spinCameraTask(self, task):
-        angleDegrees = task.time * 6.0
+        angleDegrees = task.time * 2.0
         angleRadians = angleDegrees * (pi / 180.0)
-        self.camera.setPos(20 * sin(angleRadians), -20.0 * cos(angleRadians), 2)
+        self.camera.setPos(100 * sin(angleRadians), -100.0 * cos(angleRadians), 2)
         self.camera.setHpr(angleDegrees, 0, 0)
         return Task.cont
         
     def prepareFloor(self):
-                #step 1) create GeomVertexData and add vertex information
+        #step 1) create GeomVertexData and add vertex information
         format=GeomVertexFormat.getV3c4()
         vdata=GeomVertexData("vertices", format, Geom.UHStatic)
         
 
         vertexWriter=GeomVertexWriter(vdata, "vertex")
         colorWriter = GeomVertexWriter(vdata, "color")
-        vertexWriter.addData3f(-100,-100,0)
+        vertexWriter.addData3f(-1000,-1000,0)
         colorWriter.addData4f(0.8, 0.8, 0.8, 1)
-        vertexWriter.addData3f(100,-100,0)
+        vertexWriter.addData3f(1000,-1000,0)
         colorWriter.addData4f(0.8, 0.8, 0.8, 1)
-        vertexWriter.addData3f(100,100,0)
+        vertexWriter.addData3f(1000,1000,0)
         colorWriter.addData4f(0.8, 0.8, 0.8, 1)
-        vertexWriter.addData3f(-100,100,0)
+        vertexWriter.addData3f(-1000,1000,0)
         colorWriter.addData4f(0.8, 0.8, 0.8, 1)
 
         #step 2) make primitives and assign vertices to them
@@ -76,42 +86,70 @@ class MyApp(ShowBase):
         vertexWriter=GeomVertexWriter(vdata, "vertex")
         colorWriter = GeomVertexWriter(vdata, "color")
         
-        vertexWriter.addData3f(-100,-50,-0.001)
-        colorWriter.addData4f(0,0,0,1)
-        vertexWriter.addData3f(0,0,-0.001)
-        colorWriter.addData4f(0,0,0,1)
-        vertexWriter.addData3f(5,5,-0.001)
-        colorWriter.addData4f(0,0,0,1)
-        vertexWriter.addData3f(5,50,-0.001)
-        colorWriter.addData4f(0,0,0,1)
-        vertexWriter.addData3f(99,99,-0.001)
-        colorWriter.addData4f(0,0,0,1)
-        vertexWriter.addData3f(-100,-50.001,-0.001)
-        colorWriter.addData4f(0,0,0,1)
-        vertexWriter.addData3f(-0.001,-0.001,-0.001)
-        colorWriter.addData4f(0,0,0,1)
-        vertexWriter.addData3f(4.999,4.999,-0.001)
-        colorWriter.addData4f(0,0,0,1)
-        vertexWriter.addData3f(4.999,49.999,-0.001)
-        colorWriter.addData4f(0,0,0,1)
-        vertexWriter.addData3f(98.999,98.999,-0.001)
-        colorWriter.addData4f(0,0,0,1)
+        for node in self.nodes:
+            vertexWriter.addData3f(node["lat"], node["lon"], -0.001)
+            colorWriter.addData4f(0,0,0,1)
+            
+        lines = []
         
-        line1 = GeomLinestrips(Geom.UHStatic)
-        line1.addConsecutiveVertices(0,5)
-        line1.closePrimitive()
-        
-        line2 = GeomLinestrips(Geom.UHStatic)
-        line2.addConsecutiveVertices(5,5)
-        line2.closePrimitive()
+        for way in self.ways:
+            line = GeomLinestrips(Geom.UHStatic)
+            for pointer in way["pointers"]:
+                line.addVertex(pointer)
+            line.closePrimitive()
+            lines.append(line)
         
         linesGeom = Geom(vdata)
-        linesGeom.addPrimitive(line1)
-        linesGeom.addPrimitive(line2)
+        for line in lines:
+          linesGeom.addPrimitive(line)
         
         lineGN = GeomNode("tracks")
         lineGN.addGeom(linesGeom)
         self.render.attachNewNode(lineGN)
- 
+        
+    def downloadOSMData(self):
+        # for now, hardcoded OpenStreetMap Overpass API URL for Tczew's area squared
+        bboxTop = 54.1231
+        bboxBottom = 54.0231
+        bboxLeft = 18.7280
+        bboxRight = 18.8280
+        apiUrl = "http://overpass.osm.rambler.ru/cgi/interpreter?data=[out:json][timeout:25];%28way[%22railway%22]%28%20" + str(bboxBottom) + ",%20" + str(bboxLeft) + ",%20" + str(bboxTop) + ",%20" + str(bboxRight) + "%29;%29;out%20body;%3E;out;"
+        print(apiUrl)
+        jsonString = urllib2.urlopen(apiUrl).read()
+        jsonData = json.loads(jsonString)
+        jsonWays = filter(lambda x: x["type"] == "way", jsonData["elements"])
+        jsonNodes = filter(lambda x: x["type"] == "node", jsonData["elements"])
+        #TODO: keep bbox as one object
+        self.convertAndSaveNodes(jsonNodes, bboxTop, bboxBottom, bboxLeft, bboxRight)
+        self.convertAndSaveWays(jsonWays)
+        
+    def convertAndSaveNodes(self, jsonNodes, bboxTop, bboxBottom, bboxLeft, bboxRight):
+        print("There are " + str(len(jsonNodes)) + " nodes to parse")
+        index = len(self.nodes)
+        for node in jsonNodes:
+            node["index"] = index
+            index += 1
+            # normalize for -100;+100 scale
+            node["lat"] = 100.0 * (bboxTop - node["lat"]) / ((bboxTop - bboxBottom)/2)
+            node["lon"] = 100.0 * (bboxRight - node["lon"]) / ((bboxRight - bboxLeft)/2)
+            self.nodes.append(node)
+        print("Nodes parsed")
+            
+    def convertAndSaveWays(self, jsonWays):
+        print("There are " + str(len(jsonWays)) + " ways to parse")
+        index = len(self.ways)
+        for way in jsonWays:
+            way["pointers"] = []
+            for node in way["nodes"]:
+                nodePointers = filter(lambda x: x["id"] == node, self.nodes)
+                if len(nodePointers) > 1:
+                    print("WARNING: more than one node available!")
+                elif len(nodePointers) == 0:
+                    print("ERROR: node " + str(node) + " not found, skipping!")
+                    continue
+                way["pointers"].append(nodePointers[0]["index"])
+            self.ways.append(way)
+        print("Ways parsed")
+        
 app = MyApp()
 app.run()
