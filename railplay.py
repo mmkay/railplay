@@ -12,9 +12,11 @@ class MyApp(ShowBase):
 
     def __init__(self):
         ShowBase.__init__(self)
+        ShowBase.disableMouse(self)
         
         self.nodes = []
         self.ways = []
+        self.meter = 200.0 / 2200.0 #2200 meters - diameter of rendered area
         
         self.setBackgroundColor(135.0/256.0,206.0/256.0,235.0/256.0)
        
@@ -23,15 +25,18 @@ class MyApp(ShowBase):
         self.downloadOSMData()
         
         self.loadLines()
+
+        self.camera.setPos(0,0,3.0*self.meter)
  
         # Add the spinCameraTask procedure to the task manager.
-        #self.taskMgr.add(self.spinCameraTask, "SpinCameraTask")
+        self.taskMgr.add(self.spinCameraTask, "SpinCameraTask")
  
     # Define a procedure to move the camera.
+
     def spinCameraTask(self, task):
         angleDegrees = task.time * 2.0
         angleRadians = angleDegrees * (pi / 180.0)
-        self.camera.setPos(100 * sin(angleRadians), -100.0 * cos(angleRadians), 2)
+        #self.camera.setPos(100 * sin(angleRadians), -100.0 * cos(angleRadians), 2)
         self.camera.setHpr(angleDegrees, 0, 0)
         return Task.cont
         
@@ -39,7 +44,6 @@ class MyApp(ShowBase):
         #step 1) create GeomVertexData and add vertex information
         format=GeomVertexFormat.getV3c4()
         vdata=GeomVertexData("vertices", format, Geom.UHStatic)
-        
 
         vertexWriter=GeomVertexWriter(vdata, "vertex")
         colorWriter = GeomVertexWriter(vdata, "color")
@@ -87,7 +91,7 @@ class MyApp(ShowBase):
         colorWriter = GeomVertexWriter(vdata, "color")
         
         for node in self.nodes:
-            vertexWriter.addData3f(node["lat"], node["lon"], -0.001)
+            vertexWriter.addData3f(node["lat"], node["lon"], 0.2*self.meter)
             colorWriter.addData4f(0,0,0,1)
             
         lines = []
@@ -109,18 +113,19 @@ class MyApp(ShowBase):
         
     def downloadOSMData(self):
         # for now, hardcoded OpenStreetMap Overpass API URL for Tczew's area squared
-        bboxTop = 54.1231
-        bboxBottom = 54.0231
-        bboxLeft = 18.7280
-        bboxRight = 18.8280
-        apiUrl = "http://overpass.osm.rambler.ru/cgi/interpreter?data=[out:json][timeout:25];%28way[%22railway%22]%28%20" + str(bboxBottom) + ",%20" + str(bboxLeft) + ",%20" + str(bboxTop) + ",%20" + str(bboxRight) + "%29;%29;out%20body;%3E;out;"
+        # Tczew station centre - 54.0972478, 18.7897812
+        self.bboxTop = 54.1072478
+        self.bboxBottom = 54.0872478
+        self.bboxLeft = 18.7697812
+        self.bboxRight = 18.8097812
+        apiUrl = "http://overpass.osm.rambler.ru/cgi/interpreter?data=[out:json][timeout:25];%28way[%22railway%22]%28%20" + str(self.bboxBottom) + ",%20" + str(self.bboxLeft) + ",%20" + str(self.bboxTop) + ",%20" + str(self.bboxRight) + "%29;%29;out%20body;%3E;out;"
         print(apiUrl)
         jsonString = urllib2.urlopen(apiUrl).read()
         jsonData = json.loads(jsonString)
         jsonWays = filter(lambda x: x["type"] == "way", jsonData["elements"])
         jsonNodes = filter(lambda x: x["type"] == "node", jsonData["elements"])
         #TODO: keep bbox as one object
-        self.convertAndSaveNodes(jsonNodes, bboxTop, bboxBottom, bboxLeft, bboxRight)
+        self.convertAndSaveNodes(jsonNodes, self.bboxTop, self.bboxBottom, self.bboxLeft, self.bboxRight)
         self.convertAndSaveWays(jsonWays)
         
     def convertAndSaveNodes(self, jsonNodes, bboxTop, bboxBottom, bboxLeft, bboxRight):
@@ -130,8 +135,8 @@ class MyApp(ShowBase):
             node["index"] = index
             index += 1
             # normalize for -100;+100 scale
-            node["lat"] = 100.0 * (bboxTop - node["lat"]) / ((bboxTop - bboxBottom)/2)
-            node["lon"] = -100.0 * (bboxRight - node["lon"]) / ((bboxRight - bboxLeft)/2)
+            node["lat"] = 200.0 * (bboxTop - node["lat"]) / (bboxTop - bboxBottom) - 100.0
+            node["lon"] = -1.0 * (200.0 * (bboxRight - node["lon"]) / (bboxRight - bboxLeft) - 100.0)
             self.nodes.append(node)
         print("Nodes parsed")
             
