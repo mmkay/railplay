@@ -122,7 +122,7 @@ class MyApp(ShowBase):
         print(apiUrl)
         jsonString = urllib2.urlopen(apiUrl).read()
         jsonData = json.loads(jsonString)
-        jsonWays = filter(lambda x: x["type"] == "way", jsonData["elements"])
+        jsonWays = filter(lambda x: self.isRailwayTrack(x), jsonData["elements"])
         jsonNodes = filter(lambda x: x["type"] == "node", jsonData["elements"])
         #TODO: keep bbox as one object
         self.convertAndSaveNodes(jsonNodes, self.bboxTop, self.bboxBottom, self.bboxLeft, self.bboxRight)
@@ -155,6 +155,13 @@ class MyApp(ShowBase):
                 way["pointers"].append(nodePointers[0]["index"])
             self.ways.append(way)
         print("Ways parsed")
-        
+
+    def isRailwayTrack(self, x):
+        if (x["type"] == "way"):
+            if x["tags"]["railway"] and x["tags"]["railway"] in {"rail", "tram", "subway", "disused", "narrow_gauge", "funicular", "miniature", "monorail", "preserved", "light_rail"}:
+                return True
+        return False
+
+
 app = MyApp()
 app.run()
